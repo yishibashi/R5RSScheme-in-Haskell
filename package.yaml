@@ -24,6 +24,7 @@ dependencies:
 
 library:
   source-dirs: src
+  dependencies: 
 
 executables:
   R5RSScheme-exe:
@@ -35,6 +36,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - R5RSScheme
+    - parsec
 
 tests:
   R5RSScheme-test:
@@ -46,3 +48,5 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - R5RSScheme
+    - hspec
+
