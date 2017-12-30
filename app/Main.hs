@@ -24,12 +24,24 @@ data LispVal = Atom String
              | Complex (Complex Double)
              deriving Show
 
-{-- Parser --}
+{-- +-+-+-+-+-+-+-+-+-+-+ <Parser +-+-+-+-+-+-+-+-+-+-+ --}
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=>?@^_~"
 
 spaces :: Parser ()
 spaces = skipMany1 space
+
+parseAtom :: Parser LispVal
+parseAtom = do
+    first <- letter <|> symbol
+    rest <- many (letter <|> digit <|> symbol)
+    let atom = first:rest
+    return $ Atom atom
+
+parseBool :: Parser LispVal
+parseBool = do
+    char '#'
+    (char 't' >> return (Bool True)) <|> (char 'f' >> return (Bool False))
 
 parseString :: Parser LispVal
 parseString = do
@@ -60,18 +72,6 @@ parseCharacter = do
                          "space"   -> ' '
                          "newline" -> '\n'
                          otherwise -> (x !! 0)
-
-parseAtom :: Parser LispVal
-parseAtom = do
-    first <- letter <|> symbol
-    rest <- many (letter <|> digit <|> symbol)
-    let atom = first:rest
-    return $ Atom atom
-
-parseBool :: Parser LispVal
-parseBool = do
-    char '#'
-    (char 't' >> return (Bool True)) <|> (char 'f' >> return (Bool False))
 
 parseNumber :: Parser LispVal
 parseNumber = parseDec1 <|> parseDec2 <|> {-- parseBin <|>--} parseOct <|> parseHex
@@ -184,6 +184,9 @@ parseExpr = parseAtom
                x <- try parseList <|> parseDottedList
                char ')'
                return x
+
+{-- +-+-+-+-+-+-+-+-+-+-+ Parser> +-+-+-+-+-+-+-+-+-+-+ --}
+
 
 readExpr :: String -> String
 readExpr input = case parse parseExpr "lisp" input of
