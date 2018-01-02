@@ -37,6 +37,7 @@ executables:
     dependencies:
     - R5RSScheme
     - parsec
+    - mtl
 
 tests:
   R5RSScheme-test:
