@@ -24,7 +24,7 @@ data LispVal = Atom String
              | Float Double
              | Ratio Rational
              | Complex (Complex Double)
---             deriving Show
+             deriving Eq
 
 instance Show LispVal where
     show = showVal
@@ -64,6 +64,29 @@ eval (List [Atom "if", pred, conseq, alt]) = do
     case result of
       Bool False -> eval alt
       otherwise  -> eval conseq
+eval cnd@(List (Atom "cond" : clauses)) =
+  if null clauses
+  then throwError $ BadSpecialForm "no true clause in cond expression: " cnd
+  else case head clauses of
+          List [Atom "else", expr] -> eval expr
+          List [test, expr] -> eval $ List [Atom "if", test, expr, List (Atom "cond" : tail clauses)]
+          _ -> throwError $ BadSpecialForm "ill-formed cond expression: " cnd
+
+eval cs@(List (Atom "case" : key : clauses)) =
+  if null clauses
+  then throwError $ BadSpecialForm "no true clause in case expression: " cs
+  else case head clauses of
+          List (Atom "else" : exprs) -> mapM eval exprs >>= return . last
+          List ((List datums) : exprs) -> do
+              result <- eval key
+              equality <- mapM (\x -> eqv [result, x]) datums
+              if Bool True `elem` equality
+                 then mapM eval exprs >>= return . last
+                 else eval $ List (Atom "case" : key : tail clauses)
+          _ -> throwError $ BadSpecialForm "ill-formed case expression: " cs
+
+
+
 eval (List (Atom func : args))  = mapM eval args >>= apply func
 eval badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
@@ -191,11 +214,7 @@ eqv [(Number arg1), (Number arg2)] = return $ Bool $ arg1 == arg2
 eqv [(String arg1), (String arg2)] = return $ Bool $ arg1 == arg2
 eqv [(Atom arg1), (Atom arg2)] = return $ Bool $ arg1 == arg2
 eqv [(DottedList xs x), (DottedList ys y)] = eqv [List $ xs ++ [x], List $ ys ++ [y]]
-eqv [(List arg1), (List arg2)] = return $ Bool $ (length arg1 == length arg2) && (all eqvPair $ zip arg1 arg2)
-    where
-        eqvPair (x1, x2) = case eqv [x1, x2] of
-                            Left err         -> False
-                            Right (Bool val) -> val
+eqv [l1@(List arg1), l2@(List arg2)] = eqvList eqv [l1, l2]
 eqv [_, _] = return $ Bool False
 eqv badArgList = throwError $ NumArgs 2 badArgList
 
@@ -209,7 +228,17 @@ unpackEquals arg1 arg2 (AnyUnpacker unpacker) = do
         return $ unpacked1 == unpacked2
     `catchError` (const $ return False)
 
+eqvList :: ([LispVal] -> ThrowsError LispVal) -> [LispVal] -> ThrowsError LispVal
+eqvList eqvFunc [(List arg1), (List arg2)] =
+    return $ Bool $ (length arg1 == length arg2)  && (all eqvPair $ zip arg1 arg2)
+        where eqvPair (x1, x2) = case eqvFunc [x1, x2] of
+                                   Left err         -> False
+                                   Right (Bool val) -> val
+
+
 equal :: [LispVal] -> ThrowsError LispVal
+equal [l1@(List arg1), l2@(List arg2)] = eqvList equal [l1, l2]
+equal [(DottedList xs x), (DottedList ys y)] = equal [List $ xs ++ [x], List $ ys ++ [y]]
 equal [arg1, arg2] = do
     primitiveEquals <- liftM or $ mapM (unpackEquals arg1 arg2)
                        [AnyUnpacker unpackNum, AnyUnpacker unpackStr, AnyUnpacker unpackBool]
